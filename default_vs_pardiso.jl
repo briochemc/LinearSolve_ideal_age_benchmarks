@@ -41,44 +41,14 @@ solbackslash = A \ b
 # @time "KLUFactorization" solKLUFactorization = solve(prob, KLUFactorization())
 # # @show (v' * solKLUFactorization) / sum(v) * s |> yr
 
-solUMFPACKFactorization = solve(prob, UMFPACKFactorization())
-@time "UMFPACKFactorization" solUMFPACKFactorization = solve(prob, UMFPACKFactorization())
+# solUMFPACKFactorization = solve(prob, UMFPACKFactorization())
+# @time "UMFPACKFactorization" solUMFPACKFactorization = solve(prob, UMFPACKFactorization())
 # @show (v' * solUMFPACKFactorization) / sum(v) * s |> yr
 
-for nprocs = [1, 2, 3, 6, 12, 24, 48] # (max 48 for normal queue)
-    solMKLPardisoFactorize = solve(prob, MKLPardisoFactorize(; nprocs))
-    @time "MKLPardisoFactorize nprocs=$nprocs" solMKLPardisoFactorize = solve(prob, MKLPardisoFactorize())
-    # @show (v' * solMKLPardisoFactorize) / sum(v) * s |> yr
-
-    solMKLPardisoIterate = solve(prob, MKLPardisoIterate(; nprocs))
-    @time "MKLPardisoIterate nprocs=$nprocs" solMKLPardisoIterate = solve(prob, MKLPardisoIterate())
-    # @show (v' * solMKLPardisoIterate) / sum(v) * s |> yr
-
-    solPardisoJL = solve(prob, PardisoJL(; nprocs))
-    @time "PardisoJL nprocs=$nprocs" solPardisoJL = solve(prob, PardisoJL())
-    # @show (v' * solPardisoJL) / sum(v) * s |> yr
-end
-
-
-# backslash: 92.6 seconds
-# UMFPACKFactorization: 93.5 seconds (same as default for us)
-
-# | nprocs              |    1 |    2 |    3 |   6 |  12 |  24 |  48 |
-# | :--                 | :--  | :--  | :--  | :-- | :-- | :-- | :-- |
-# | MKLPardisoFactorize | 23.1 | 17.5 | 17.0 | 8.9 | 6.6 | 6.3 | 6.7 |
-# | MKLPardisoIterate   | 23.4 | 17.7 | 17.2 | 9.2 | 8.4 | 5.7 | 6.8 |
-# | PardisoJL           | 27.2 | 17.5 | 17.1 | 9.0 | 6.3 | 5.8 | 6.9 |
-
-# sol1 = solve(prob)
-# plt1 = plothorizontalslice((sol1 - sol0) * s .|> yr, grd, depth=1000m, clim=(-200, 200), cmap=:balance)
-# @time sol1 = solve(prob)
-
-# sol2 = solve(prob, KLUFactorization())
-# plt2 = plothorizontalslice((sol2 - sol0) * s .|> yr, grd, depth=1000m, clim=(-200, 200), cmap=:balance)
-# @time sol2 = solve(prob, KLUFactorization())
-# sol3 = solve(prob, UMFPACKFactorization())
-# plt3 = plothorizontalslice((sol3 - sol0) * s .|> yr, grd, depth=1000m, clim=(-200, 200), cmap=:balance)
-# @time sol3 = solve(prob, UMFPACKFactorization())
+nprocs = 48
+solMKLPardisoFactorize = solve(prob, MKLPardisoFactorize(; nprocs))
+@time "MKLPardisoFactorize nprocs=$nprocs" solMKLPardisoFactorize = solve(prob, MKLPardisoFactorize())
+# Other Pardiso solvers gave the same timings
 
 # sol4 = solve(prob, SparspakFactorization())
 # plt4 = plothorizontalslice((sol4 - sol0) * s .|> yr, grd, depth=1000m, clim=(-200, 200), cmap=:balance)
