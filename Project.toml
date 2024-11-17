@@ -1,5 +1,7 @@
 [deps]
+AIBECS = "ace601d6-714c-11e9-04e5-89b7fad23838"
 AlgebraicMultigrid = "2169fc97-5a83-5252-b627-83903c6c433c"
+BlockArrays = "8e7c35d0-a365-5155-bbbb-fb81a777f24e"
 FileIO = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
 HYPRE = "b5ffcf37-a2bd-41ab-a3da-4bd9bc8ad771"
 IncompleteLU = "40713840-3770-5561-ab4c-a76e7d0d7895"

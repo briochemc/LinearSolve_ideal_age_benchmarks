@@ -31,6 +31,15 @@ b = ones(size(A, 1))
 # Solve the system using the LinearSolve.jl package
 prob = LinearProblem(A, b)
 
+# extra test
+nprocs = 48
+@time "init" linsolve = init(prob, MKLPardisoFactorize(; nprocs))
+@time "solve" solve!(linsolve)
+linsolve.b = 2b
+@time "resolve after changing b" solve!(linsolve)
+
+fooo
+
 # Solve twice to avoid precompilation
 solbackslash = A \ b
 @time "backslash" solbackslash = A \ b
