@@ -126,7 +126,10 @@ b = δt * ones(N * Nseasons)
 @info "Setting up full seasonal problem"
 prob = LinearProblem(A, b; u0 = repeat(u0, outer = Nseasons))
 
-@time "initialize full problem" linsolve = init(prob, KrylovJL_GMRES(gmres_restart = 200), Pl = I)
+@time "initialize full problem" linsolve = init(prob, KrylovJL_GMRES(gmres_restart = 200), Pl = Pl)
+
+# Don't run line below (too slow without preconditioner)
+# @time "initialize full problem" linsolve = init(prob, KrylovJL_GMRES(gmres_restart = 200), Pl = I)
 
 @info "Now attempting seasonal solve"
 
