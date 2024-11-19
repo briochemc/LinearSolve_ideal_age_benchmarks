@@ -116,7 +116,7 @@ function LinearAlgebra.ldiv!(y::AbstractVector, Pl::CycloPreconditioner, x::Abst
     return y
 end
 
-@info "solve non seasonal steady state"
+@info "solve seasonal steady state"
 prob0 = LinearProblem(T + M, ones(N))
 @time "solve steady state" u0 = solve(prob0, MKLPardisoFactorize(; nprocs = 48)).u
 

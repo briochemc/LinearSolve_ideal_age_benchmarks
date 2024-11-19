@@ -206,7 +206,7 @@ nonlinearprob! = NonlinearProblem(f!, u0, p)
 # # internalnorm(u, t) = maximum(abs, u[.!issrf])
 # # u0 = zeros(size(u0))
 
-@info "solve non seasonal steady state"
+@info "solve seasonal steady state"
 # @time sol = solve(nonlinearprob, NewtonRaphson(linsolve = KrylovJL_GMRES(precs = precs)), verbose = true, reltol=1e-10, abstol=Inf);
 @time sol! = solve(nonlinearprob!, NewtonRaphson(linsolve = KrylovJL_GMRES(precs = precs, rtol=1e-12)); show_trace = Val(true), reltol=Inf, abstol=1e-10norm(u0, Inf));
 
