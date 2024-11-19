@@ -104,7 +104,6 @@ precs = Returns((Pl, Pr))
 @time "initial state solve" u0 = solve(LinearProblem(M̄, ones(N)), MKLPardisoIterate(; nprocs = 48), rtol = 1e-10).u
 @show norm(M̄ * u0 - ones(N)) / norm(ones(N))
 
-
 function initstepprob(A)
     prob = LinearProblem(A, δt * ones(N))
     return init(prob, MKLPardisoIterate(; nprocs = 48), rtol = 1e-10)
@@ -114,7 +113,7 @@ end
 
 p = (;
     δt,
-    stepprob = [initstepprob(I + δt * (α * T + Ω)) for (α, season) in zip(αs, steps)]
+    stepprob = [initstepprob(I + δt * M) for M in Ms]
 )
 function mystep!(du, u, p, m)
     prob = p.stepprob[m]
@@ -145,14 +144,16 @@ end
 #     return out
 # end
 function steponeyear!(du, u, p)
+    du .= u
     for m in eachindex(steps)
-        mystep!(du, u, p, m)
+        mystep!(du, du, p, m)
     end
     return du
 end
 function jvponeyear!(dv, v, p)
+    dv .= v
     for m in eachindex(steps)
-        jvpstep!(dv, v, p, m)
+        jvpstep!(dv, dv, p, m)
     end
     return dv
 end
