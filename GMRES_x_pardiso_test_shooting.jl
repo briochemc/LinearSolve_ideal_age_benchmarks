@@ -15,9 +15,10 @@ using Statistics
 # Define the model
 # grd, T = Primeau_2x2x2.load()
 # grd, T = Archer_etal_2000.load()
-grd, T = OCCA.load()
-# grd, T = OCIM0.load() # <- too big to GMRES-solve in 1hr it seems
-# grd, T = OCIM2_48L.load()
+# grd, T = OCCA.load()
+# grd, T = OCIM0.load()
+# grd, T = OCIM1.load()
+grd, T = OCIM2_48L.load()
 N = size(T, 1)
 
 v = grd.volume_3D[grd.wet3D];
@@ -88,15 +89,15 @@ function LinearAlgebra.ldiv!(y::AbstractVector, Pl::CycloPreconditioner, x::Abst
     y .= Pl.prob.u .- x # Note the -x (following Bardin et al)
     return y
 end
-M̄ = mean(Ms) # TODO Not sure this is correct! DO I use Ā or T̄? or something else?
+M̄ = mean(Ms) #
 Δt = sum(δt for _ in steps)
 
-Plprob = LinearProblem(-Δt * M̄, ones(N))  # following Bardin et al. (M -> -M though)
 # Note: rtol can be set with MKLPardisoIterate (which probably opts in iterative refinements)
 # as opposed to MKLPardisoFactorize for which rtol has no effect (no iterative refinements I guess)
-Plprob = init(Plprob, MKLPardisoIterate(; nprocs = 48), rtol = 1e-10)
 # Plprob = init(Plprob, MKLPardisoFactorize(; nprocs = 48))
 # Plprob = init(Plprob)
+Plprob = LinearProblem(-Δt * M̄, ones(N))  # following Bardin et al. (M -> -M though)
+Plprob = init(Plprob, MKLPardisoIterate(; nprocs = 48), rtol = 1e-10)
 Pl = CycloPreconditioner(Plprob)
 Pr = I
 precs = Returns((Pl, Pr))
@@ -145,14 +146,14 @@ end
 # end
 function steponeyear!(du, u, p)
     du .= u
-    for m in eachindex(steps)
+    for m in eachindex(p.stepprob)
         mystep!(du, du, p, m)
     end
     return du
 end
 function jvponeyear!(dv, v, p)
     dv .= v
-    for m in eachindex(steps)
+    for m in eachindex(p.stepprob)
         jvpstep!(dv, dv, p, m)
     end
     return dv
