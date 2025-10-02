@@ -12,12 +12,15 @@ using HYPRE
 using MPI
 using LinearAlgebra
 using Unitful
-using Unitful: m, s, yr
+using Unitful: m, s, yr, Myr
 using Plots
 import Pardiso # import Pardiso instead of using (to avoid name clash?)
+using RestrictProlong
 
 # Define the model
-grd, T = OCCA.load()
+grd, T = AIBECS.JLD2.load("/Users/z3319805/Downloads/OCCA.jld2", "grid", "T")
+T = ustrip.(s^-1, T)
+# grd, T = OCCA.load()
 # grd, T = Primeau_2x2x2.load()
 
 issrf = let
@@ -31,7 +34,7 @@ A = T + sparse(Diagonal(issrf))
 b = ones(size(A, 1))
 
 # Solve the system using the LinearSolve.jl package
-prob = LinearProblem(A, b)
+prob = LinearProblem(A, b, u0 = ustrip(s, 1000yr) * ones(size(b)))
 
 sol0 = A \ b
 plt0 = plothorizontalslice(sol0 * s .|> yr, grd, depth=1000m, clim=(0, 2000))
@@ -64,11 +67,10 @@ end
 if false # cannot use MKL Pardiso on Mac
     matrix_type = Pardiso.REAL_SYM
     solver = MKLPardisoIterate(; nprocs=6, matrix_type)
-    prob6 = init(prob, solver, rtol = 1e-10)
+    prob6 = init(prob, solver, reltol = 1e-10)
     @time sol6 = solve!(prob6).u
 end
 
-foo
 
 if false # does not seem to work with OCCA matrix
     @time Pl = IncompleteLU.ilu(A, τ = 0.0) # even with "full" LU, which takes ages to factorize!?
@@ -80,25 +82,144 @@ if false # KrylovPreconditioner is only for GPUs
     @time sol8 = solve(prob, KrylovJL_GMRES(; restart = true), Pl = Pl)
 end
 
-foo, baz = let
-    function setup_2D(n=128,T::Type=Float64)
-        L = zeros(T,n+2,n+2,2); L[3:n+1,2:n+1,1] .= 1; L[2:n+1,3:n+1,2] .= 1;
-        x = T[i-1 for i ∈ 1:n+2, j ∈ 1:n+2]
-        Poisson(L),FieldVector(x)
-    end
 
-    A, x = setup_2D(4)
 
-    A, x
+# Try my own lump-solve-spray as preconditioner (but with Tim Holy's anti-alising idea)
+wet3D = grd.wet3D
+wet = wet3D[:]
+nx, ny, nz = size(wet3D)
+# Create lumping matrices in each dimension
+vi = repeat(1:nx, inner=2)[1:nx]
+vj = repeat(1:ny, inner=2)[1:ny]
+vk = repeat(1:nz, inner=1)[1:nz]
+LUMPx = sparse(vi, 1:nx, true)
+LUMPy = sparse(vj, 1:ny, true)
+LUMPz = sparse(vk, 1:nz, true)
+# Wrap along longitude
+# LUMPx = sparse(restrict(I(nx + 4), 1))
+# LUMPx = LUMPx[2:end-1, :] # remove ghost rows
+# LUMPx_west_ghost = LUMPx[:, 2]
+# LUMPx_east_ghost = LUMPx[:, end-1]
+# LUMPx = LUMPx[:, 3:end-2] # remove ghost columns
+# LUMPx[:, 1] .+= LUMPx_east_ghost # add ghost cell weights to first real cell
+# LUMPx[:, end] .+= LUMPx_west_ghost # add ghost cell weights to last real cell
+# LUMPx = nx / sum(LUMPx) * LUMPx # normalize to conserve volume? # CHECK if necessary after volume weighting below
+# LUMPx
+
+# LUMPx = sparse(restrict(I(nx), 1))
+# LUMPx = nx / sum(LUMPx) * LUMPx # normalize to conserve volume? # CHECK if necessary after volume weighting below
+
+# LUMPy = sparse(restrict(I(ny), 1))
+# LUMPy = ny / sum(LUMPy) * LUMPy # normalize to conserve volume? # CHECK if necessary after volume weighting below
+
+# LUMPz = sparse(1.0I(nz))
+# kron each dimension to build whole LUMP matrix
+LUMP = kron(LUMPz, kron(LUMPy, LUMPx))
+
+# Find wet points in coarsened grid
+wet_c = LUMP * wet .> 0
+nx_c = size(LUMPx, 1)
+ny_c = size(LUMPy, 1)
+nz_c = size(LUMPz, 1)
+wet3D_c = fill(false, nx_c, ny_c, nz_c)
+wet3D_c[wet_c] .= true
+
+# Extract only indices of wet grd points
+LUMP = LUMP[wet_c, wet]
+
+# Make the LUMP operator mass-conserving
+# by volume integrating on the right and dividing by the coarse
+# volume on the left
+volume = grd.volume_3D[wet3D]
+volume_c = LUMP * volume
+LUMP = sparse(Diagonal(1 ./ volume_c)) * LUMP * sparse(Diagonal(volume))
+
+# The SPRAY operator just copies the values back
+# so it is sinply 1's with the transposed sparsity structure
+# SPRAY = copy(LUMP')
+# SPRAY.nzval .= 1
+SPRAY = transpose(LUMP)
+
+# CHeck mass conservation
+xtest = rand(size(wet))
+volume' * xtest ≈ volume_c' * (LUMP * xtest) # should be true
+
+issrf_c = let
+    issrf3D_c = zeros(size(wet3D_c))
+    issrf3D_c[:,:,1] .= 1
+    issrf3D_c[wet3D_c]
 end
+
+v = grd.volume_3D[wet3D]
+e1 = ones(size(v))
+
+τdiv = ustrip(Myr, norm(e1) / norm(T * e1) * s)
+τdiv > 1e6
+@info "    div: $(round(τdiv, sigdigits=2)) Myr"
+
+τvol = ustrip(Myr, norm(v) / norm(T' * v) * s)
+τvol > 1e6
+@info "    vol: $(round(τvol, sigdigits=2)) Myr"
+
+T_c = LUMP * T * SPRAY
+e1_c = ones(size(T_c, 1))
+
+τdiv_c = ustrip(Myr, norm(e1_c) / norm(T_c * e1_c) * s)
+τdiv_c > 1e6
+@info "    div: $(round(τdiv_c, sigdigits=2)) Myr"
+
+v_c = volume_c
+τvol_c = ustrip(Myr, norm(v_c) / norm(T_c' * v_c) * s)
+τvol_c > 1e6
+@info "    vol: $(round(τvol_c, sigdigits=2)) Myr"
+
+A_c = LUMP * T * SPRAY + sparse(Diagonal(issrf_c))
+A_c_factor = factorize(A_c)
+A_c_factor = factorize(LUMP * A * SPRAY) # equivalent and maybe faster?
+
+
+struct MyPreconditioner
+    SPRAY
+    LUMP
+    A_c_factor
+end
+Base.eltype(::MyPreconditioner) = Float64
+function LinearAlgebra.ldiv!(Pl::MyPreconditioner, x::AbstractVector)
+    @info "applying 2-arg Pl"
+    x .= Pl.SPRAY * (Pl.A_c_factor \ (Pl.LUMP * x))
+end
+function LinearAlgebra.ldiv!(y::AbstractVector, Pl::MyPreconditioner, x::AbstractVector)
+    @info "applying 3-arg Pl"
+    y .= Pl.SPRAY * (Pl.A_c_factor \ (Pl.LUMP * x))
+end
+Pl2 = MyPreconditioner(SPRAY, LUMP, A_c_factor)
+Pr = I
+precs = Returns((Pl2, Pr))
+
+
+struct MySuperPreconditioner
+    A_factor
+end
+Base.eltype(::MySuperPreconditioner) = Float64
+LinearAlgebra.ldiv!(Pl::MySuperPreconditioner, x::AbstractVector) = ldiv!(Pl.A_factor, x)
+LinearAlgebra.ldiv!(y::AbstractVector, Pl::MySuperPreconditioner, x::AbstractVector) = ldiv!(y, Pl.A_factor, x)
+superPl = MySuperPreconditioner(factorize(A))
+Pr = I
+superprecs = Returns((superPl, Pr))
+
+sol_mg1 = solve(prob, KrylovJL_GMRES(); Pl = superPl, maxiters = 100, restarts = 50, verbose = true, reltol = 1e-12)
+plot(sol_mg1 * s .|> yr)
+sol_mg2 = solve(prob, KrylovJL_GMRES(); Pl = Pl2, maxiters = 100, restarts = 50, verbose = true, reltol = 1e-12)
+plot(sol_mg2 * s .|> yr)
+scatter(sol_mg1 * s .|> yr, sol_mg2 * s .|> yr, markersize = 1)
 
 foo
 
 # AlgebraicMultigrid: Implementations of the algebraic multigrid method. Must be converted to a preconditioner via AlgebraicMultigrid.aspreconditioner(AlgebraicMultigrid.precmethod(A)). Requires A as a AbstractMatrix. Provides the following methods:
-# Pl = AlgebraicMultigrid.aspreconditioner(AlgebraicMultigrid.ruge_stuben(A; max_levels=3, coarse_solver=AlgebraicMultigrid.LinearSolveWrapper(UMFPACKFactorization())))
-# sol6 = solve(prob, KrylovJL_GMRES(); Pl)
-# plt6 = plothorizontalslice((sol6 - sol0) * s .|> yr, grd, depth=1000m, clim=(-200, 200), cmap=:balance)
-# @time sol6 = solve(prob, KrylovJL_GMRES(); Pl)
+Pl = AlgebraicMultigrid.aspreconditioner(AlgebraicMultigrid.smoothed_aggregation(A; max_levels=2, coarse_solver=AlgebraicMultigrid.LinearSolveWrapper(UMFPACKFactorization())));
+sol6 = solve(prob, KrylovJL_CG(); Pl, maxiters = 1000, restarts = 50, verbose = true, reltol = 1e-10)
+plt6 = plothorizontalslice((sol6 - sol0) * s .|> yr, grd, depth=1000m, clim=(-200, 200), cmap=:balance)
+@time sol6 = solve(prob, KrylovJL_GMRES(); Pl, maxiters = 100, restarts = 50, verbose = true, reltol = 1e-12)
 
 # Pl = AlgebraicMultigrid.aspreconditioner(AlgebraicMultigrid.smoothed_aggregation(A; max_levels=3, coarse_solver=AlgebraicMultigrid.LinearSolveWrapper(UMFPACKFactorization())))
 # sol7 = solve(prob, IterativeSolversJL_CG(); Pl)
@@ -107,12 +228,14 @@ foo
 # @time sol7 = solve(prob, IterativeSolversJL_CG(); Pl)
 
 
+Pl = PyAMG.aspreconditioner(PyAMG.precmethod(A))
+
 
 # IncompleteLU.ilu: an implementation of the incomplete LU-factorization preconditioner. This requires A as a SparseMatrixCSC.
-# @time Pl = IncompleteLU.ilu(A, τ=1e-8) # arbitriry largest τ for which solver worked fast
-# sol8 = solve(prob, KrylovJL_GMRES(); Pl)
-# plt8 = plothorizontalslice((sol8 - sol0) * s .|> yr, grd, depth=1000m, clim=(-200, 200), cmap=:balance)
-# @time sol8 = solve(prob, KrylovJL_GMRES(); Pl)
+@time Pl = IncompleteLU.ilu(A, τ=1e-8) # arbitriry largest τ for which solver worked fast
+sol8 = solve(prob, KrylovJL_GMRES(); Pl, maxiters = 1000, restarts = 50, verbose = true, reltol = 1e-12)
+plt8 = plothorizontalslice((sol8 - sol0) * s .|> yr, grd, depth=1000m, clim=(-200, 200), cmap=:balance)
+@time sol8 = solve(prob, KrylovJL_GMRES(); Pl)
 
 
 
