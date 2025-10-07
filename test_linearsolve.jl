@@ -17,11 +17,24 @@ using Plots
 import Pardiso # import Pardiso instead of using (to avoid name clash?)
 using RestrictProlong
 
+@info "Loading the grid and transport matrix..."
+
 # Define the model
-grd, T = AIBECS.JLD2.load("/Users/z3319805/Downloads/OCCA.jld2", "grid", "T")
-T = ustrip.(s^-1, T)
+# grd, T = AIBECS.JLD2.load("/Users/z3319805/Downloads/OCCA.jld2", "grid", "T")
 # grd, T = OCCA.load()
+grd, T = OCIM2_48L.load()
+# grd, T = AIBECS.JLD2.load("/Users/z3319805/Downloads/OCIM2_CTL_He.jld2", "grid", "T")
 # grd, T = Primeau_2x2x2.load()
+
+
+
+T = ustrip.(s^-1, T)
+
+@info "Grid size: $(size(grd.wet3D))"
+@info "Number of wet cells: $(count(grd.wet3D))"
+@info "Number of nonzeros in T: $(nnz(T))"
+
+@info "Setting up the linear problem..."
 
 issrf = let
     issrf3D = zeros(size(grd.wet3D))
@@ -36,21 +49,22 @@ b = ones(size(A, 1))
 # Solve the system using the LinearSolve.jl package
 prob = LinearProblem(A, b, u0 = ustrip(s, 1000yr) * ones(size(b)))
 
+
 sol0 = A \ b
 plt0 = plothorizontalslice(sol0 * s .|> yr, grd, depth=1000m, clim=(0, 2000))
-@time sol0 = A \ b
+@time "backslash" sol0 = A \ b
 
 sol1 = solve(prob)
 plt1 = plothorizontalslice((sol1 - sol0) * s .|> yr, grd, depth=1000m, clim=(-200, 200), cmap=:balance)
-@time sol1 = solve(prob)
+@time "default LinearSolve solve" sol1 = solve(prob)
 
 sol2 = solve(prob, KLUFactorization())
 plt2 = plothorizontalslice((sol2 - sol0) * s .|> yr, grd, depth=1000m, clim=(-200, 200), cmap=:balance)
-@time sol2 = solve(prob, KLUFactorization())
+@time "KLUFactorization" sol2 = solve(prob, KLUFactorization())
 
 sol3 = solve(prob, UMFPACKFactorization())
 plt3 = plothorizontalslice((sol3 - sol0) * s .|> yr, grd, depth=1000m, clim=(-200, 200), cmap=:balance)
-@time sol3 = solve(prob, UMFPACKFactorization())
+@time "UMFPACKFactorization" sol3 = solve(prob, UMFPACKFactorization())
 
 # sol4 = solve(prob, SparspakFactorization())
 # plt4 = plothorizontalslice((sol4 - sol0) * s .|> yr, grd, depth=1000m, clim=(-200, 200), cmap=:balance)
@@ -209,17 +223,28 @@ superprecs = Returns((superPl, Pr))
 
 sol_mg1 = solve(prob, KrylovJL_GMRES(); Pl = superPl, maxiters = 100, restarts = 50, verbose = true, reltol = 1e-12)
 plot(sol_mg1 * s .|> yr)
+@time "KrylovJL_GMRES + lu(A) as preconditioner" sol_mg1 = solve(prob, KrylovJL_GMRES(); Pl = superPl, maxiters = 100, restarts = 50, verbose = true, reltol = 1e-12)
+
 sol_mg2 = solve(prob, KrylovJL_GMRES(); Pl = Pl2, maxiters = 100, restarts = 50, verbose = true, reltol = 1e-12)
 plot(sol_mg2 * s .|> yr)
+@time "KrylovJL_GMRES + coarsened LU as preconditioner" sol_mg2 = solve(prob, KrylovJL_GMRES(); Pl = Pl2, maxiters = 100, restarts = 50, verbose = true, reltol = 1e-12)
+
 scatter(sol_mg1 * s .|> yr, sol_mg2 * s .|> yr, markersize = 1)
 
-foo
 
 # AlgebraicMultigrid: Implementations of the algebraic multigrid method. Must be converted to a preconditioner via AlgebraicMultigrid.aspreconditioner(AlgebraicMultigrid.precmethod(A)). Requires A as a AbstractMatrix. Provides the following methods:
-Pl = AlgebraicMultigrid.aspreconditioner(AlgebraicMultigrid.smoothed_aggregation(A; max_levels=2, coarse_solver=AlgebraicMultigrid.LinearSolveWrapper(UMFPACKFactorization())));
-sol6 = solve(prob, KrylovJL_CG(); Pl, maxiters = 1000, restarts = 50, verbose = true, reltol = 1e-10)
+# Pl = AlgebraicMultigrid.aspreconditioner(AlgebraicMultigrid.smoothed_aggregation(A; max_levels=2, coarse_solver=AlgebraicMultigrid.LinearSolveWrapper(UMFPACKFactorization())));
+prob_normal = LinearProblem(A' * A, A' * b)
+# Pl = AlgebraicMultigrid.aspreconditioner(AlgebraicMultigrid.ruge_stuben(A' * A))
+Pl = AlgebraicMultigrid.aspreconditioner(AlgebraicMultigrid.smoothed_aggregation(A' * A))
+# sol6 = solve(prob_normal, KrylovJL_CG(); Pl, maxiters = 1000, restarts = 50, verbose = true, reltol = 1e-10)
+sol6 = solve(prob_normal, KrylovJL_GMRES(); Pl, maxiters = 500, verbose = true, reltol = 1e-10)
+
+Pl = AlgebraicMultigrid.aspreconditioner(AlgebraicMultigrid.smoothed_aggregation(A))
+sol6 = solve(prob, KrylovJL_GMRES(); Pl, maxiters = 500, verbose = true, reltol = 1e-10)
+
 plt6 = plothorizontalslice((sol6 - sol0) * s .|> yr, grd, depth=1000m, clim=(-200, 200), cmap=:balance)
-@time sol6 = solve(prob, KrylovJL_GMRES(); Pl, maxiters = 100, restarts = 50, verbose = true, reltol = 1e-12)
+@time "KrylovJL_GMRES + AMG smoothed_aggregation" sol6 = solve(prob, KrylovJL_GMRES(); Pl, maxiters = 100, restarts = 50, verbose = true, reltol = 1e-12)
 
 # Pl = AlgebraicMultigrid.aspreconditioner(AlgebraicMultigrid.smoothed_aggregation(A; max_levels=3, coarse_solver=AlgebraicMultigrid.LinearSolveWrapper(UMFPACKFactorization())))
 # sol7 = solve(prob, IterativeSolversJL_CG(); Pl)
@@ -228,14 +253,21 @@ plt6 = plothorizontalslice((sol6 - sol0) * s .|> yr, grd, depth=1000m, clim=(-20
 # @time sol7 = solve(prob, IterativeSolversJL_CG(); Pl)
 
 
-Pl = PyAMG.aspreconditioner(PyAMG.precmethod(A))
+
+
+
+# Pl = PyAMG.aspreconditioner(PyAMG.precmethod(A))
 
 
 # IncompleteLU.ilu: an implementation of the incomplete LU-factorization preconditioner. This requires A as a SparseMatrixCSC.
 @time Pl = IncompleteLU.ilu(A, τ=1e-8) # arbitriry largest τ for which solver worked fast
 sol8 = solve(prob, KrylovJL_GMRES(); Pl, maxiters = 1000, restarts = 50, verbose = true, reltol = 1e-12)
 plt8 = plothorizontalslice((sol8 - sol0) * s .|> yr, grd, depth=1000m, clim=(-200, 200), cmap=:balance)
-@time sol8 = solve(prob, KrylovJL_GMRES(); Pl)
+@time "KrylovJL_GMRES + ILU(τ=1e-8) as preconditioner" sol8 = solve(prob, KrylovJL_GMRES(); Pl, maxiters = 1000, restarts = 50, verbose = true, reltol = 1e-12)
+
+
+
+
 
 
 
@@ -248,15 +280,71 @@ plt8 = plothorizontalslice((sol8 - sol0) * s .|> yr, grd, depth=1000m, clim=(-20
 # prec = HYPRE.BoomerAMG
 # @time sol = solve(prob, alg; Pl = prec)
 
+
+
+
+
+
+
 # Direct HYPRE test
+
+using HYPRE.LibHYPRE: HYPRE_BigInt,
+                      HYPRE_Complex, HYPRE_IJMatrixGetValues,
+                      HYPRE_IJVectorGetValues, HYPRE_Int
+
+# Convert from HYPREArrays to Julia arrays
+function to_array(A::HYPREMatrix)
+    i = (A.ilower):(A.iupper)
+    j = (A.jlower):(A.jupper)
+    nrows = HYPRE_Int(length(i))
+    ncols = fill(HYPRE_Int(length(j)), length(i))
+    rows = convert(Vector{HYPRE_BigInt}, i)
+    cols = convert(Vector{HYPRE_BigInt}, repeat(j, length(i)))
+    values = Vector{HYPRE_Complex}(undef, length(i) * length(j))
+    HYPRE_IJMatrixGetValues(A.ijmatrix, nrows, ncols, rows, cols, values)
+    return sparse(permutedims(reshape(values, (length(j), length(i)))))
+end
+function to_array(b::HYPREVector)
+    i = (b.ilower):(b.iupper)
+    nvalues = HYPRE_Int(length(i))
+    indices = convert(Vector{HYPRE_BigInt}, i)
+    values = Vector{HYPRE_Complex}(undef, length(i))
+    HYPRE_IJVectorGetValues(b.ijvector, nvalues, indices, values)
+    return values
+end
+to_array(x) = x
+
+
+
 HYPRE.Init()
 A_h = HYPREMatrix(A)
 b_h = HYPREVector(b)
+
+prob_h = LinearProblem(A_h, b_h)
+
 Tol = 1e-12
 # gmres = HYPRE.GMRES(; Tol)
 # @time x_h = HYPRE.solve(gmres, A_h, b_h)
+# alg = HYPREAlgorithm(HYPRE.BoomerAMG) # fails
+# alg = HYPREAlgorithm(HYPRE.BiCGSTAB) # fails
+# alg = HYPREAlgorithm(HYPRE.FlexGMRES) # fails
+alg = HYPREAlgorithm(HYPRE.GMRES) # fails
+# alg = HYPREAlgorithm(HYPRE.Hybrid) # fails (segfaults?)
+# alg = HYPREAlgorithm(HYPRE.ILU) # fails
+# alg = HYPREAlgorithm(HYPRE.PCG)
+# Pl = HYPRE.BoomerAMG
+Pl = HYPRE.ILU
+y = solve(prob_h, alg; Pl, verbose=true, maxiters=5000, reltol=1e-12)
+y = solve(prob_h, alg; verbose=true, maxiters=1000)
+y = solve(prob_h, alg; verbose=true, maxiters=1000, Pl = HYPRE.ParaSails)
+sol10 = to_array(y.u)
+
+
 
 Precond = HYPRE.BoomerAMG()
+
+x_ph = HYPRE.solve(gmres, A_h, b_h)
+
 gmres = HYPRE.FlexGMRES(; Tol, Precond)
 @time x_ph = HYPRE.solve(gmres, A_h, b_h)
 x = zeros(size(b))
