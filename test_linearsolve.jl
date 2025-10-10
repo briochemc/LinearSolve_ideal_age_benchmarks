@@ -20,9 +20,9 @@ using RestrictProlong
 @info "Loading the grid and transport matrix..."
 
 # Define the model
-# grd, T = AIBECS.JLD2.load("/Users/z3319805/Downloads/OCCA.jld2", "grid", "T")
+grd, T = AIBECS.JLD2.load("/Users/z3319805/Downloads/OCCA.jld2", "grid", "T")
 # grd, T = OCCA.load()
-grd, T = OCIM2_48L.load()
+# grd, T = OCIM2_48L.load()
 # grd, T = AIBECS.JLD2.load("/Users/z3319805/Downloads/OCIM2_CTL_He.jld2", "grid", "T")
 # grd, T = Primeau_2x2x2.load()
 
@@ -228,6 +228,8 @@ plot(sol_mg1 * s .|> yr)
 sol_mg2 = solve(prob, KrylovJL_GMRES(); Pl = Pl2, maxiters = 100, restarts = 50, verbose = true, reltol = 1e-12)
 plot(sol_mg2 * s .|> yr)
 @time "KrylovJL_GMRES + coarsened LU as preconditioner" sol_mg2 = solve(prob, KrylovJL_GMRES(); Pl = Pl2, maxiters = 100, restarts = 50, verbose = true, reltol = 1e-12)
+plt_mg2 = plothorizontalslice((sol_mg2 - sol0) * s .|> yr, grd, depth=1000m, clim=(-200, 200), cmap=:balance)
+
 
 scatter(sol_mg1 * s .|> yr, sol_mg2 * s .|> yr, markersize = 1)
 
