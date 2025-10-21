@@ -14,6 +14,7 @@ using LinearAlgebra
 using Unitful
 using Unitful: m, s, yr, Myr
 using Plots
+using PETSc
 import Pardiso # import Pardiso instead of using (to avoid name clash?)
 using RestrictProlong
 
@@ -244,7 +245,6 @@ sol6 = solve(prob_normal, KrylovJL_GMRES(); Pl, maxiters = 500, verbose = true, 
 
 Pl = AlgebraicMultigrid.aspreconditioner(AlgebraicMultigrid.smoothed_aggregation(A))
 sol6 = solve(prob, KrylovJL_GMRES(); Pl, maxiters = 500, verbose = true, reltol = 1e-10)
-
 plt6 = plothorizontalslice((sol6 - sol0) * s .|> yr, grd, depth=1000m, clim=(-200, 200), cmap=:balance)
 @time "KrylovJL_GMRES + AMG smoothed_aggregation" sol6 = solve(prob, KrylovJL_GMRES(); Pl, maxiters = 100, restarts = 50, verbose = true, reltol = 1e-12)
 
@@ -255,8 +255,13 @@ plt6 = plothorizontalslice((sol6 - sol0) * s .|> yr, grd, depth=1000m, clim=(-20
 # @time sol7 = solve(prob, IterativeSolversJL_CG(); Pl)
 
 
+if false # throws because A is not symmetric
+    strategy = KrylovJL_CG(precs = RugeStubenPreconBuilder())
+    sol = solve(prob, strategy, atol=1.0e-14)
 
-
+    strategy = KrylovJL_CG(precs = SmoothedAggregationPreconBuilder())
+    sol = solve(prob, strategy, atol=1.0e-14)
+end
 
 # Pl = PyAMG.aspreconditioner(PyAMG.precmethod(A))
 
@@ -271,6 +276,38 @@ plt8 = plothorizontalslice((sol8 - sol0) * s .|> yr, grd, depth=1000m, clim=(-20
 
 
 
+# Try PETSc
+MPI.Initialized() || MPI.Init()
+PETSc.initialize()
+
+# don't print these below
+M_PETSc = PETSc.MatSeqAIJ(A);
+b_PETSc = PETSc.VecSeq(b);
+x_PETSc = PETSc.VecSeq(zeros(size(b)));
+
+ksp = PETSc.KSP(
+    M_PETSc;
+    ksp_monitor = false,    # set to true for output
+    ksp_monitor_true_residual = false,
+    ksp_view = false,
+    log_view = true,
+    ksp_type = "gmres",
+    ksp_rtol = 1e-10,
+    pc_type = "hypre",
+    # mg_levels_ksp_type = "chebyshev",
+    # mg_levels_ksp_max_it = 3,
+    # mg_levels_pc_type = "bjacobi",
+    # mg_levels_sub_pc_type = "icc",
+    # mg_coarse_ksp_type = "preonly",
+    # mg_coarse_pc_type = "cholesky",
+);
+
+@time PETSc.solve!(x_PETSc, ksp, b_PETSc)
+sol_PETSc = x_PETSc.array
+plt_PETSc = plothorizontalslice(100(sol_PETSc - sol0) ./ sol0, grd, depth=1000m, clim=(-100, 100), cmap=:balance)
+
+
+foo
 
 
 # BoomerAMG preconditioner
