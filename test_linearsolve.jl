@@ -21,15 +21,10 @@ using RestrictProlong
 @info "Loading the grid and transport matrix..."
 
 # Define the model
-grd, T = AIBECS.JLD2.load("/Users/z3319805/Downloads/OCCA.jld2", "grid", "T")
-# grd, T = OCCA.load()
+grd, T = OCCA.load()
+foo
 # grd, T = OCIM2_48L.load()
-# grd, T = AIBECS.JLD2.load("/Users/z3319805/Downloads/OCIM2_CTL_He.jld2", "grid", "T")
 # grd, T = Primeau_2x2x2.load()
-
-
-
-T = ustrip.(s^-1, T)
 
 @info "Grid size: $(size(grd.wet3D))"
 @info "Number of wet cells: $(count(grd.wet3D))"
