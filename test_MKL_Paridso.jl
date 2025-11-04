@@ -16,10 +16,8 @@ using Unitful
 using Unitful: m, s, yr, Myr
 
 
-
 @show BLAS.get_config().loaded_libs
 # @show Pardiso.blaslib
-
 
 
 # grd, T = AIBECS.JLD2.load("/Users/z3319805/Downloads/OCCA.jld2", "grid", "T")
@@ -35,7 +33,7 @@ grd, T = OCCA.load()
 
 issrf = let
     issrf3D = zeros(size(grd.wet3D))
-    issrf3D[:,:,1] .= 1
+    issrf3D[:, :, 1] .= 1
     issrf3D[grd.wet3D]
 end
 
@@ -51,5 +49,5 @@ sol0 = A \ b
 
 matrix_type = Pardiso.REAL_SYM
 solver = MKLPardisoIterate(; nprocs, matrix_type)
-prob6 = init(prob, solver, reltol = 1e-10)
+prob6 = init(prob, solver, reltol = 1.0e-10)
 @time "Pardiso + MKL.jl" sol6 = solve!(prob6).u

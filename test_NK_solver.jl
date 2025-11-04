@@ -91,21 +91,21 @@
 # end
 
 @info "Solve the system using MG+GMRES"
-@time "GMRES" sol_gmres = copy(solve(prob, KrylovJL_GMRES(); maxiters = 500, restarts = 50, verbose = true, reltol = 1e-12).u)
+@time "GMRES" sol_gmres = copy(solve(prob, KrylovJL_GMRES(); maxiters = 500, restarts = 50, verbose = true, reltol = 1.0e-12).u)
 @show norm((I + δt * M) * sol_gmres - b) / norm(b)
-plt = plothorizontalslice((sol_gmres - sol0) * s .|> yr, grd, depth=1000m, clim=(-200, 200), cmap=:balance)
+plt = plothorizontalslice((sol_gmres - sol0) * s .|> yr, grd, depth = 1000m, clim = (-200, 200), cmap = :balance)
 savefig(plt, "GMRES_tracer_error.png")
 
 Pl = MyPreconditioner(M_c_factor)
-@time "MG + GMRES" sol_mg = copy(solve(prob, KrylovJL_GMRES(); Pl = Pl, maxiters = 500, restarts = 50, verbose = true, reltol = 1e-12).u)
+@time "MG + GMRES" sol_mg = copy(solve(prob, KrylovJL_GMRES(); Pl = Pl, maxiters = 500, restarts = 50, verbose = true, reltol = 1.0e-12).u)
 @show norm((I + δt * M) * sol_mg - b) / norm(b)
-plt = plothorizontalslice((sol_mg - sol0) * s .|> yr, grd, depth=1000m, clim=(-200, 200), cmap=:balance)
+plt = plothorizontalslice((sol_mg - sol0) * s .|> yr, grd, depth = 1000m, clim = (-200, 200), cmap = :balance)
 savefig(plt, "MG+GMRES_tracer_error.png")
 
-@time "ILU fact" Pl = IncompleteLU.ilu(I + δt * M, τ=1e-8)
-@time "ILU solve" sol_ilu = copy(solve(prob, KrylovJL_GMRES(); Pl = Pl, maxiters = 500, restarts = 50, verbose = true, reltol = 1e-12).u)
+@time "ILU fact" Pl = IncompleteLU.ilu(I + δt * M, τ = 1.0e-8)
+@time "ILU solve" sol_ilu = copy(solve(prob, KrylovJL_GMRES(); Pl = Pl, maxiters = 500, restarts = 50, verbose = true, reltol = 1.0e-12).u)
 @show norm((I + δt * M) * sol_ilu - b) / norm(b)
-plt = plothorizontalslice((sol_ilu - sol0) * s .|> yr, grd, depth=1000m, clim=(-200, 200), cmap=:balance)
+plt = plothorizontalslice((sol_ilu - sol0) * s .|> yr, grd, depth = 1000m, clim = (-200, 200), cmap = :balance)
 savefig(plt, "ILU+GMRES_tracer_error.png")
 
 @show norm((I + δt * M) * sol_gmres - b) / norm(b)

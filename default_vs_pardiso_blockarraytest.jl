@@ -21,7 +21,7 @@ v = grd.volume_3D[grd.wet3D];
 
 issrf = let
     issrf3D = zeros(size(grd.wet3D))
-    issrf3D[:,:,1] .= 1
+    issrf3D[:, :, 1] .= 1
     issrf3D[grd.wet3D]
 end
 M = sparse(Diagonal(issrf))
@@ -33,7 +33,7 @@ Nα = length(αs)
 A = BlockArray(spzeros(Nα * Nwet, Nα * Nwet), fill(Nwet, Nα), fill(Nwet, Nα))
 @time "building blocks" for (i, α) in enumerate(αs)
     A[Block(i, i)] = I + δt * (α * T + M)
-    A[Block(mod1(i+1, Nα), i)] = -I(Nwet)
+    A[Block(mod1(i + 1, Nα), i)] = -I(Nwet)
 end
 # @time "converting BlockArray to standard sparse" A = sparse(A)
 A = @time "converting BlockArray to standard sparse" reduce(hcat, reduce(vcat, A[Block(i, j)] for i in 1:blocksize(A, 1)) for j in 1:blocksize(A, 2))

@@ -36,7 +36,7 @@ foo
 
 issrf = let
     issrf3D = zeros(size(grd.wet3D))
-    issrf3D[:,:,1] .= 1
+    issrf3D[:, :, 1] .= 1
     issrf3D[grd.wet3D]
 end
 
@@ -49,19 +49,19 @@ prob = LinearProblem(A, b, u0 = ustrip(s, 1000yr) * ones(size(b)))
 
 
 sol0 = A \ b
-plt0 = plothorizontalslice(sol0 * s .|> yr, grd, depth=1000m, clim=(0, 2000))
+plt0 = plothorizontalslice(sol0 * s .|> yr, grd, depth = 1000m, clim = (0, 2000))
 @time "backslash" sol0 = A \ b
 
 sol1 = solve(prob)
-plt1 = plothorizontalslice((sol1 - sol0) * s .|> yr, grd, depth=1000m, clim=(-200, 200), cmap=:balance)
+plt1 = plothorizontalslice((sol1 - sol0) * s .|> yr, grd, depth = 1000m, clim = (-200, 200), cmap = :balance)
 @time "default LinearSolve solve" sol1 = solve(prob)
 
 sol2 = solve(prob, KLUFactorization())
-plt2 = plothorizontalslice((sol2 - sol0) * s .|> yr, grd, depth=1000m, clim=(-200, 200), cmap=:balance)
+plt2 = plothorizontalslice((sol2 - sol0) * s .|> yr, grd, depth = 1000m, clim = (-200, 200), cmap = :balance)
 @time "KLUFactorization" sol2 = solve(prob, KLUFactorization())
 
 sol3 = solve(prob, UMFPACKFactorization())
-plt3 = plothorizontalslice((sol3 - sol0) * s .|> yr, grd, depth=1000m, clim=(-200, 200), cmap=:balance)
+plt3 = plothorizontalslice((sol3 - sol0) * s .|> yr, grd, depth = 1000m, clim = (-200, 200), cmap = :balance)
 @time "UMFPACKFactorization" sol3 = solve(prob, UMFPACKFactorization())
 
 # sol4 = solve(prob, SparspakFactorization())
@@ -71,7 +71,7 @@ plt3 = plothorizontalslice((sol3 - sol0) * s .|> yr, grd, depth=1000m, clim=(-20
 # GMRES no preconditioner
 if false # hangs
     sol5 = solve(prob, KrylovJL_GMRES())
-    plt5 = plothorizontalslice((sol5 - sol0) * s .|> yr, grd, depth=1000m, clim=(-200, 200), cmap=:balance)
+    plt5 = plothorizontalslice((sol5 - sol0) * s .|> yr, grd, depth = 1000m, clim = (-200, 200), cmap = :balance)
     @time sol5 = solve(prob)
 end
 
@@ -96,14 +96,12 @@ if true
     # option 2 would be to loop through the water columns
     TridiagonalA = Tridiagonal(A_kfirst)
     prob_kfirst = LinearProblem(A_kfirst, b_kfirst)
-    @time "KrylovJL_GMRES + TriDiag k-first as preconditioner" sol_kfirst = solve(prob_kfirst, KrylovJL_GMRES(); Pl = TridiagonalA, maxiters = 1000, restarts = 100, verbose = true, reltol = 1e-12)
+    @time "KrylovJL_GMRES + TriDiag k-first as preconditioner" sol_kfirst = solve(prob_kfirst, KrylovJL_GMRES(); Pl = TridiagonalA, maxiters = 1000, restarts = 100, verbose = true, reltol = 1.0e-12)
     sol_kfirst_back = sol_kfirst[idx_kfirst]
 
 
-
-
     sol5 = solve(prob, KrylovJL_GMRES())
-    plt5 = plothorizontalslice((sol5 - sol0) * s .|> yr, grd, depth=1000m, clim=(-200, 200), cmap=:balance)
+    plt5 = plothorizontalslice((sol5 - sol0) * s .|> yr, grd, depth = 1000m, clim = (-200, 200), cmap = :balance)
     @time sol5 = solve(prob)
 end
 
@@ -111,7 +109,7 @@ end
 if true
     wet3D = grd.wet3D
     maxindexinlayer = [sum(wet3D[:, :, 1:k]) for k in axes(wet3D, 3)]
-    minindexinlayer = [1; maxindexinlayer[1:end-1] .+ 1]
+    minindexinlayer = [1; maxindexinlayer[1:(end - 1)] .+ 1]
     idx_layers = [min:max for (min, max) in zip(minindexinlayer, maxindexinlayer)]
 
 
@@ -138,7 +136,7 @@ if true
     )
 
 
-    @time "KrylovJL_GMRES + layer-by-layer LU as preconditioner" sol_layers = solve(prob, KrylovJL_GMRES(); Pl = Pl_layer, maxiters = 1000, restarts = 100, verbose = true, reltol = 1e-12)
+    @time "KrylovJL_GMRES + layer-by-layer LU as preconditioner" sol_layers = solve(prob, KrylovJL_GMRES(); Pl = Pl_layer, maxiters = 1000, restarts = 100, verbose = true, reltol = 1.0e-12)
 
 
 end
@@ -174,7 +172,7 @@ if true # hangs? Curous why this one would hang but not the diagonal?
         idx_layers,
         [factorize(A[idx, idx]) for idx in idx_layers]
     )
-    @time "KrylovJL_GMRES + layer-by-layer lower block LU as preconditioner" sol_layers = solve(prob, KrylovJL_GMRES(); Pl = Pl_lowerblocklayer, maxiters = 1000, restarts = 100, verbose = true, reltol = 1e-12)
+    @time "KrylovJL_GMRES + layer-by-layer lower block LU as preconditioner" sol_layers = solve(prob, KrylovJL_GMRES(); Pl = Pl_lowerblocklayer, maxiters = 1000, restarts = 100, verbose = true, reltol = 1.0e-12)
 
 end
 
@@ -218,40 +216,42 @@ if false # does not work for OCCA
     """
     Note that this function modifies `x`, `L`, `D` and `b` in place
     """
-    @views function block_thomas_tridiagonal!(x::AbstractVector, L::AbstractVector{T},
-        D::AbstractVector{T}, U::AbstractVector{T}, b::AbstractVector) where {T}
+    @views function block_thomas_tridiagonal!(
+            x::AbstractVector, L::AbstractVector{T},
+            D::AbstractVector{T}, U::AbstractVector{T}, b::AbstractVector
+        ) where {T}
         n = size(D[1], 1) # each block has size n*n
         m = length(D) # num of blocks
         (; lu_buf, D_buf, b_buf) = get_block_thomas_buffer(n, m)
 
         # Forward elimination
-        for i = 1:m-1
+        for i in 1:(m - 1)
             lu_buf[i] = lu!(D[i])
             rdiv!(L[i], lu_buf[i])
-            D[i+1] .-= mul!(D_buf, L[i], U[i])
-            b[n*i+1:n*(i+1)] .-= mul!(b_buf, L[i], b[n*(i-1)+1:n*i])
+            D[i + 1] .-= mul!(D_buf, L[i], U[i])
+            b[(n * i + 1):(n * (i + 1))] .-= mul!(b_buf, L[i], b[(n * (i - 1) + 1):(n * i)])
         end
 
         # Backward substitution
-        ldiv!(x[n*(m-1)+1:n*m], lu!(D[m]), b[n*(m-1)+1:n*m])
-        for i = m-1:-1:1
-            ldiv!(x[n*(i-1)+1:n*i], lu_buf[i], b[n*(i-1)+1:n*i] - mul!(b_buf, U[i], x[n*i+1:n*(i+1)]))
+        ldiv!(x[(n * (m - 1) + 1):(n * m)], lu!(D[m]), b[(n * (m - 1) + 1):(n * m)])
+        for i in (m - 1):-1:1
+            ldiv!(x[(n * (i - 1) + 1):(n * i)], lu_buf[i], b[(n * (i - 1) + 1):(n * i)] - mul!(b_buf, U[i], x[(n * i + 1):(n * (i + 1))]))
         end
 
         return x
     end
 
 
-    wet3D = grd.wet3D;
-    maxindexinlayer = [sum(wet3D[:, :, 1:k]) for k in axes(wet3D, 3)];
-    minindexinlayer = [1; maxindexinlayer[1:end-1] .+ 1];
-    idx_layers = [min:max for (min, max) in zip(minindexinlayer, maxindexinlayer)];
+    wet3D = grd.wet3D
+    maxindexinlayer = [sum(wet3D[:, :, 1:k]) for k in axes(wet3D, 3)]
+    minindexinlayer = [1; maxindexinlayer[1:(end - 1)] .+ 1]
+    idx_layers = [min:max for (min, max) in zip(minindexinlayer, maxindexinlayer)]
 
     sol_BlockThomas = copy(b)
     b_BlockThomas = copy(b)
     D = [A[idx, idx] for idx in idx_layers]
-    L = [A[Lidx, idx] for (Lidx, idx) in zip(idx_layers[2:end], idx_layers[1:end-1])]
-    U = [A[idx, Uidx] for (idx, Uidx) in zip(idx_layers[1:end-1], idx_layers[2:end])]
+    L = [A[Lidx, idx] for (Lidx, idx) in zip(idx_layers[2:end], idx_layers[1:(end - 1)])]
+    U = [A[idx, Uidx] for (idx, Uidx) in zip(idx_layers[1:(end - 1)], idx_layers[2:end])]
     sol_BlockThomas = block_thomas_tridiagonal!(sol_BlockThomas, L, D, U, b_BlockThomas)
 
 
@@ -262,8 +262,8 @@ foo
 # Pardiso solver
 if false # cannot use MKL Pardiso on Mac
     matrix_type = Pardiso.REAL_SYM
-    solver = MKLPardisoIterate(; nprocs=6, matrix_type)
-    prob6 = init(prob, solver, reltol = 1e-10)
+    solver = MKLPardisoIterate(; nprocs = 6, matrix_type)
+    prob6 = init(prob, solver, reltol = 1.0e-10)
     @time sol6 = solve!(prob6).u
 end
 
@@ -279,15 +279,14 @@ if false # KrylovPreconditioner is only for GPUs
 end
 
 
-
 # Try my own lump-solve-spray as preconditioner (but with Tim Holy's anti-alising idea)
 wet3D = grd.wet3D
 wet = wet3D[:]
 nx, ny, nz = size(wet3D)
 # Create lumping matrices in each dimension
-vi = repeat(1:nx, inner=2)[1:nx]
-vj = repeat(1:ny, inner=2)[1:ny]
-vk = repeat(1:nz, inner=1)[1:nz]
+vi = repeat(1:nx, inner = 2)[1:nx]
+vj = repeat(1:ny, inner = 2)[1:ny]
+vk = repeat(1:nz, inner = 1)[1:nz]
 LUMPx = sparse(vi, 1:nx, true)
 LUMPy = sparse(vj, 1:ny, true)
 LUMPz = sparse(vk, 1:nz, true)
@@ -342,7 +341,7 @@ volume' * xtest ≈ volume_c' * (LUMP * xtest) # should be true
 
 issrf_c = let
     issrf3D_c = zeros(size(wet3D_c))
-    issrf3D_c[:,:,1] .= 1
+    issrf3D_c[:, :, 1] .= 1
     issrf3D_c[wet3D_c]
 end
 
@@ -350,24 +349,24 @@ v = grd.volume_3D[wet3D]
 e1 = ones(size(v))
 
 τdiv = ustrip(Myr, norm(e1) / norm(T * e1) * s)
-τdiv > 1e6
-@info "    div: $(round(τdiv, sigdigits=2)) Myr"
+τdiv > 1.0e6
+@info "    div: $(round(τdiv, sigdigits = 2)) Myr"
 
 τvol = ustrip(Myr, norm(v) / norm(T' * v) * s)
-τvol > 1e6
-@info "    vol: $(round(τvol, sigdigits=2)) Myr"
+τvol > 1.0e6
+@info "    vol: $(round(τvol, sigdigits = 2)) Myr"
 
 T_c = LUMP * T * SPRAY
 e1_c = ones(size(T_c, 1))
 
 τdiv_c = ustrip(Myr, norm(e1_c) / norm(T_c * e1_c) * s)
-τdiv_c > 1e6
-@info "    div: $(round(τdiv_c, sigdigits=2)) Myr"
+τdiv_c > 1.0e6
+@info "    div: $(round(τdiv_c, sigdigits = 2)) Myr"
 
 v_c = volume_c
 τvol_c = ustrip(Myr, norm(v_c) / norm(T_c' * v_c) * s)
-τvol_c > 1e6
-@info "    vol: $(round(τvol_c, sigdigits=2)) Myr"
+τvol_c > 1.0e6
+@info "    vol: $(round(τvol_c, sigdigits = 2)) Myr"
 
 A_c = LUMP * T * SPRAY + sparse(Diagonal(issrf_c))
 A_c_factor = factorize(A_c)
@@ -382,11 +381,11 @@ end
 Base.eltype(::MyPreconditioner) = Float64
 function LinearAlgebra.ldiv!(Pl::MyPreconditioner, x::AbstractVector)
     @info "applying 2-arg Pl"
-    x .= Pl.SPRAY * (Pl.A_c_factor \ (Pl.LUMP * x))
+    return x .= Pl.SPRAY * (Pl.A_c_factor \ (Pl.LUMP * x))
 end
 function LinearAlgebra.ldiv!(y::AbstractVector, Pl::MyPreconditioner, x::AbstractVector)
     @info "applying 3-arg Pl"
-    y .= Pl.SPRAY * (Pl.A_c_factor \ (Pl.LUMP * x))
+    return y .= Pl.SPRAY * (Pl.A_c_factor \ (Pl.LUMP * x))
 end
 Pl2 = MyPreconditioner(SPRAY, LUMP, A_c_factor)
 Pr = I
@@ -403,14 +402,14 @@ superPl = MySuperPreconditioner(factorize(A))
 Pr = I
 superprecs = Returns((superPl, Pr))
 
-sol_mg1 = solve(prob, KrylovJL_GMRES(); Pl = superPl, maxiters = 100, restarts = 50, verbose = true, reltol = 1e-12)
+sol_mg1 = solve(prob, KrylovJL_GMRES(); Pl = superPl, maxiters = 100, restarts = 50, verbose = true, reltol = 1.0e-12)
 plot(sol_mg1 * s .|> yr)
-@time "KrylovJL_GMRES + lu(A) as preconditioner" sol_mg1 = solve(prob, KrylovJL_GMRES(); Pl = superPl, maxiters = 100, restarts = 50, verbose = true, reltol = 1e-12)
+@time "KrylovJL_GMRES + lu(A) as preconditioner" sol_mg1 = solve(prob, KrylovJL_GMRES(); Pl = superPl, maxiters = 100, restarts = 50, verbose = true, reltol = 1.0e-12)
 
-sol_mg2 = solve(prob, KrylovJL_GMRES(); Pl = Pl2, maxiters = 100, restarts = 50, verbose = true, reltol = 1e-12)
+sol_mg2 = solve(prob, KrylovJL_GMRES(); Pl = Pl2, maxiters = 100, restarts = 50, verbose = true, reltol = 1.0e-12)
 plot(sol_mg2 * s .|> yr)
-@time "KrylovJL_GMRES + coarsened LU as preconditioner" sol_mg2 = solve(prob, KrylovJL_GMRES(); Pl = Pl2, maxiters = 100, restarts = 50, verbose = true, reltol = 1e-12)
-plt_mg2 = plothorizontalslice((sol_mg2 - sol0) * s .|> yr, grd, depth=1000m, clim=(-200, 200), cmap=:balance)
+@time "KrylovJL_GMRES + coarsened LU as preconditioner" sol_mg2 = solve(prob, KrylovJL_GMRES(); Pl = Pl2, maxiters = 100, restarts = 50, verbose = true, reltol = 1.0e-12)
+plt_mg2 = plothorizontalslice((sol_mg2 - sol0) * s .|> yr, grd, depth = 1000m, clim = (-200, 200), cmap = :balance)
 
 
 scatter(sol_mg1 * s .|> yr, sol_mg2 * s .|> yr, markersize = 1)
@@ -422,12 +421,12 @@ prob_normal = LinearProblem(A' * A, A' * b)
 # Pl = AlgebraicMultigrid.aspreconditioner(AlgebraicMultigrid.ruge_stuben(A' * A))
 Pl = AlgebraicMultigrid.aspreconditioner(AlgebraicMultigrid.smoothed_aggregation(A' * A))
 # sol6 = solve(prob_normal, KrylovJL_CG(); Pl, maxiters = 1000, restarts = 50, verbose = true, reltol = 1e-10)
-sol6 = solve(prob_normal, KrylovJL_GMRES(); Pl, maxiters = 500, verbose = true, reltol = 1e-10)
+sol6 = solve(prob_normal, KrylovJL_GMRES(); Pl, maxiters = 500, verbose = true, reltol = 1.0e-10)
 
 Pl = AlgebraicMultigrid.aspreconditioner(AlgebraicMultigrid.smoothed_aggregation(A))
-sol6 = solve(prob, KrylovJL_GMRES(); Pl, maxiters = 500, verbose = true, reltol = 1e-10)
-plt6 = plothorizontalslice((sol6 - sol0) * s .|> yr, grd, depth=1000m, clim=(-200, 200), cmap=:balance)
-@time "KrylovJL_GMRES + AMG smoothed_aggregation" sol6 = solve(prob, KrylovJL_GMRES(); Pl, maxiters = 100, restarts = 50, verbose = true, reltol = 1e-12)
+sol6 = solve(prob, KrylovJL_GMRES(); Pl, maxiters = 500, verbose = true, reltol = 1.0e-10)
+plt6 = plothorizontalslice((sol6 - sol0) * s .|> yr, grd, depth = 1000m, clim = (-200, 200), cmap = :balance)
+@time "KrylovJL_GMRES + AMG smoothed_aggregation" sol6 = solve(prob, KrylovJL_GMRES(); Pl, maxiters = 100, restarts = 50, verbose = true, reltol = 1.0e-12)
 
 # Pl = AlgebraicMultigrid.aspreconditioner(AlgebraicMultigrid.smoothed_aggregation(A; max_levels=3, coarse_solver=AlgebraicMultigrid.LinearSolveWrapper(UMFPACKFactorization())))
 # sol7 = solve(prob, IterativeSolversJL_CG(); Pl)
@@ -438,23 +437,20 @@ plt6 = plothorizontalslice((sol6 - sol0) * s .|> yr, grd, depth=1000m, clim=(-20
 
 if false # throws because A is not symmetric
     strategy = KrylovJL_CG(precs = RugeStubenPreconBuilder())
-    sol = solve(prob, strategy, atol=1.0e-14)
+    sol = solve(prob, strategy, atol = 1.0e-14)
 
     strategy = KrylovJL_CG(precs = SmoothedAggregationPreconBuilder())
-    sol = solve(prob, strategy, atol=1.0e-14)
+    sol = solve(prob, strategy, atol = 1.0e-14)
 end
 
 # Pl = PyAMG.aspreconditioner(PyAMG.precmethod(A))
 
 
 # IncompleteLU.ilu: an implementation of the incomplete LU-factorization preconditioner. This requires A as a SparseMatrixCSC.
-@time Pl = IncompleteLU.ilu(A, τ=1e-8) # arbitriry largest τ for which solver worked fast
-sol8 = solve(prob, KrylovJL_GMRES(); Pl, maxiters = 1000, restarts = 50, verbose = true, reltol = 1e-12)
-plt8 = plothorizontalslice((sol8 - sol0) * s .|> yr, grd, depth=1000m, clim=(-200, 200), cmap=:balance)
-@time "KrylovJL_GMRES + ILU(τ=1e-8) as preconditioner" sol8 = solve(prob, KrylovJL_GMRES(); Pl, maxiters = 1000, restarts = 50, verbose = true, reltol = 1e-12)
-
-
-
+@time Pl = IncompleteLU.ilu(A, τ = 1.0e-8) # arbitriry largest τ for which solver worked fast
+sol8 = solve(prob, KrylovJL_GMRES(); Pl, maxiters = 1000, restarts = 50, verbose = true, reltol = 1.0e-12)
+plt8 = plothorizontalslice((sol8 - sol0) * s .|> yr, grd, depth = 1000m, clim = (-200, 200), cmap = :balance)
+@time "KrylovJL_GMRES + ILU(τ=1e-8) as preconditioner" sol8 = solve(prob, KrylovJL_GMRES(); Pl, maxiters = 1000, restarts = 50, verbose = true, reltol = 1.0e-12)
 
 
 # Try PETSc
@@ -473,7 +469,7 @@ ksp = PETSc.KSP(
     ksp_view = false,
     log_view = true,
     ksp_type = "gmres",
-    ksp_rtol = 1e-10,
+    ksp_rtol = 1.0e-10,
     pc_type = "hypre",
     # mg_levels_ksp_type = "chebyshev",
     # mg_levels_ksp_max_it = 3,
@@ -485,7 +481,7 @@ ksp = PETSc.KSP(
 
 @time PETSc.solve!(x_PETSc, ksp, b_PETSc)
 sol_PETSc = x_PETSc.array
-plt_PETSc = plothorizontalslice(100(sol_PETSc - sol0) ./ sol0, grd, depth=1000m, clim=(-100, 100), cmap=:balance)
+plt_PETSc = plothorizontalslice(100(sol_PETSc - sol0) ./ sol0, grd, depth = 1000m, clim = (-100, 100), cmap = :balance)
 
 
 foo
@@ -501,16 +497,11 @@ foo
 # @time sol = solve(prob, alg; Pl = prec)
 
 
-
-
-
-
-
 # Direct HYPRE test
 
 using HYPRE.LibHYPRE: HYPRE_BigInt,
-                      HYPRE_Complex, HYPRE_IJMatrixGetValues,
-                      HYPRE_IJVectorGetValues, HYPRE_Int
+    HYPRE_Complex, HYPRE_IJMatrixGetValues,
+    HYPRE_IJVectorGetValues, HYPRE_Int
 
 # Convert from HYPREArrays to Julia arrays
 function to_array(A::HYPREMatrix)
@@ -535,14 +526,13 @@ end
 to_array(x) = x
 
 
-
 HYPRE.Init()
 A_h = HYPREMatrix(A)
 b_h = HYPREVector(b)
 
 prob_h = LinearProblem(A_h, b_h)
 
-Tol = 1e-12
+Tol = 1.0e-12
 # gmres = HYPRE.GMRES(; Tol)
 # @time x_h = HYPRE.solve(gmres, A_h, b_h)
 # alg = HYPREAlgorithm(HYPRE.BoomerAMG) # fails
@@ -554,11 +544,10 @@ alg = HYPREAlgorithm(HYPRE.GMRES) # fails
 # alg = HYPREAlgorithm(HYPRE.PCG)
 # Pl = HYPRE.BoomerAMG
 Pl = HYPRE.ILU
-y = solve(prob_h, alg; Pl, verbose=true, maxiters=5000, reltol=1e-12)
-y = solve(prob_h, alg; verbose=true, maxiters=1000)
-y = solve(prob_h, alg; verbose=true, maxiters=1000, Pl = HYPRE.ParaSails)
+y = solve(prob_h, alg; Pl, verbose = true, maxiters = 5000, reltol = 1.0e-12)
+y = solve(prob_h, alg; verbose = true, maxiters = 1000)
+y = solve(prob_h, alg; verbose = true, maxiters = 1000, Pl = HYPRE.ParaSails)
 sol10 = to_array(y.u)
-
 
 
 Precond = HYPRE.BoomerAMG()
@@ -597,10 +586,6 @@ xi = zeros(size(bi))
 copy!(xi, xi_h)
 
 
-
-
-
-
 # copy-pasted from HYPRE.jl tests
 A = sprand(100, 100, 0.05); A = A + 5I
 b = rand(100)
@@ -625,6 +610,3 @@ copy!(x, x_h)
 x ≈ A \ b
 
 [A * x b]
-
-
-

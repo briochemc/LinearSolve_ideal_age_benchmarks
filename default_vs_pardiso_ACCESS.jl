@@ -30,7 +30,7 @@ v = v3D[wet3D]
 
 issrf = let
     issrf3D = zeros(size(wet3D))
-    issrf3D[:,:,1] .= 1
+    issrf3D[:, :, 1] .= 1
     issrf3D[wet3D]
 end
 

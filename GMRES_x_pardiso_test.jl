@@ -23,7 +23,7 @@ v = grd.volume_3D[grd.wet3D];
 
 issrf = let
     issrf3D = zeros(size(grd.wet3D))
-    issrf3D[:,:,1] .= 1
+    issrf3D[:, :, 1] .= 1
     issrf3D[grd.wet3D]
 end
 M = sparse(Diagonal(issrf))
@@ -45,11 +45,11 @@ Nseasons = length(seasons)
 A = BlockArray(spzeros(Nseasons * N, Nseasons * N), fill(N, Nseasons), fill(N, Nseasons))
 @time "building blocks" for (i, (α, season)) in enumerate(zip(αs, seasons))
     A[Block(i, i)] = I + δt * (α * T + M)
-    A[Block(mod1(i+1, Nseasons), i)] = -I(N)
+    A[Block(mod1(i + 1, Nseasons), i)] = -I(N)
 end
 
 function initseasonlinprob(A, i)
-    prob = LinearProblem(A[Block(i,i)], δt * ones(N))
+    prob = LinearProblem(A[Block(i, i)], δt * ones(N))
     return init(prob, MKLPardisoFactorize(; nprocs = 48))
 end
 Pl = CycloPreconditioner(
@@ -62,7 +62,7 @@ Pl = CycloPreconditioner(
 
 # @time "converting BlockArray to standard sparse" A = sparse(A)
 function initseasonlinprob(A, i)
-    prob = LinearProblem(A[Block(i,i)], δt * ones(N))
+    prob = LinearProblem(A[Block(i, i)], δt * ones(N))
     return init(prob, MKLPardisoFactorize(; nprocs = 48))
 end
 Pl = CycloPreconditioner(
@@ -134,8 +134,6 @@ prob = LinearProblem(A, b; u0 = repeat(u0, outer = Nseasons))
 @info "Now attempting seasonal solve"
 
 @time "solve" solve!(linsolve)
-
-
 
 
 @time "Direct solve" linsolve2 = solve(prob, MKLPardisoFactorize(; nprocs = 48))

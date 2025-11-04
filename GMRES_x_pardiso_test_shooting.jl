@@ -25,7 +25,7 @@ v = grd.volume_3D[grd.wet3D];
 
 issrf = let
     issrf3D = falses(size(grd.wet3D))
-    issrf3D[:,:,1] .= true
+    issrf3D[:, :, 1] .= true
     issrf3D[grd.wet3D]
 end
 Ω = sparse(Diagonal(Float64.(issrf)))
@@ -97,24 +97,24 @@ M̄ = mean(Ms) #
 # Plprob = init(Plprob, MKLPardisoFactorize(; nprocs = 48))
 # Plprob = init(Plprob)
 Plprob = LinearProblem(-Δt * M̄, ones(N))  # following Bardin et al. (M -> -M though)
-Plprob = init(Plprob, MKLPardisoIterate(; nprocs = 48), rtol = 1e-10)
+Plprob = init(Plprob, MKLPardisoIterate(; nprocs = 48), rtol = 1.0e-10)
 Pl = CycloPreconditioner(Plprob)
 Pr = I
 precs = Returns((Pl, Pr))
 
-@time "initial state solve" u0 = solve(LinearProblem(M̄, ones(N)), MKLPardisoIterate(; nprocs = 48), rtol = 1e-10).u
+@time "initial state solve" u0 = solve(LinearProblem(M̄, ones(N)), MKLPardisoIterate(; nprocs = 48), rtol = 1.0e-10).u
 @show norm(M̄ * u0 - ones(N)) / norm(ones(N))
 
 function initstepprob(A)
     prob = LinearProblem(A, δt * ones(N))
-    return init(prob, MKLPardisoIterate(; nprocs = 48), rtol = 1e-10)
+    return init(prob, MKLPardisoIterate(; nprocs = 48), rtol = 1.0e-10)
     # return init(prob, MKLPardisoFactorize(; nprocs = 48))
     # return init(prob)
 end
 
 p = (;
     δt,
-    stepprob = [initstepprob(I + δt * M) for M in Ms]
+    stepprob = [initstepprob(I + δt * M) for M in Ms],
 )
 function mystep!(du, u, p, m)
     prob = p.stepprob[m]
@@ -210,7 +210,7 @@ nonlinearprob! = NonlinearProblem(f!, u0, p)
 
 @info "solve seasonal steady state"
 # @time sol = solve(nonlinearprob, NewtonRaphson(linsolve = KrylovJL_GMRES(precs = precs)), verbose = true, reltol=1e-10, abstol=Inf);
-@time sol! = solve(nonlinearprob!, NewtonRaphson(linsolve = KrylovJL_GMRES(precs = precs, rtol=1e-12)); show_trace = Val(true), reltol=Inf, abstol=1e-10norm(u0, Inf));
+@time sol! = solve(nonlinearprob!, NewtonRaphson(linsolve = KrylovJL_GMRES(precs = precs, rtol = 1.0e-12)); show_trace = Val(true), reltol = Inf, abstol = 1.0e-10norm(u0, Inf));
 
 
 du = deepcopy(u0)

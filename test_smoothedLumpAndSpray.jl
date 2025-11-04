@@ -1,4 +1,3 @@
-
 using Pkg
 Pkg.activate(".")
 
@@ -26,7 +25,7 @@ grd, T = OCCA.load()
 
 issrf = let
     issrf3D = zeros(size(grd.wet3D))
-    issrf3D[:,:,1] .= 1
+    issrf3D[:, :, 1] .= 1
     issrf3D[grd.wet3D]
 end
 
@@ -43,7 +42,7 @@ prob = LinearProblem(M, b, u0 = 1000 * ones(size(b)))
 @info "Now try GMRES with multigrid with smoothed preconditioner"
 wet3D = grd.wet3D
 v = grd.volume_3D[wet3D]
-LUMP, SPRAY, v_c = OceanTransportMatrixBuilder.lump_and_spray(wet3D, v, T; di=2, dj=2, dk=1)
+LUMP, SPRAY, v_c = OceanTransportMatrixBuilder.lump_and_spray(wet3D, v, T; di = 2, dj = 2, dk = 1)
 
 # One implicit backward time step
 # (x(t+dt) - x(t)) / dt + M x(t+dt) = 1
@@ -52,9 +51,9 @@ LUMP, SPRAY, v_c = OceanTransportMatrixBuilder.lump_and_spray(wet3D, v, T; di=2,
 # (x(t+dt) - x(t)) / dt + M (x(t+dt) + x(t))/2 = 1
 # (I + dt/2 M) x(t+dt) = (I - dt/2 M) x(t) + dt
 dt = ustrip(s, 1yr)
-M\^+
-TIMESTEPfac = factorize(I + dt/2 * M)
-TIMESTEP(x) = TIMESTEPfac \ ((I - dt/2 * M) * x .+ dt)
+M⁺
+TIMESTEPfac = factorize(I + dt / 2 * M)
+TIMESTEP(x) = TIMESTEPfac \ ((I - dt / 2 * M) * x .+ dt)
 
 # SPRAY is the tentative unsmoothed prolongation operator?
 ω = 0.7 # smoothing parameter
@@ -76,11 +75,11 @@ end
 Base.eltype(::MyPreconditioner) = Float64
 function LinearAlgebra.ldiv!(Pl::MyPreconditioner, x::AbstractVector)
     # x .= PROLONG * (Pl.M_c_factor \ (RESTRICT * x))
-    x .= TIMESTEP(SPRAY * (Pl.M_c_factor \ (LUMP * TIMESTEP(x))))
+    return x .= TIMESTEP(SPRAY * (Pl.M_c_factor \ (LUMP * TIMESTEP(x))))
 end
 function LinearAlgebra.ldiv!(y::AbstractVector, Pl::MyPreconditioner, x::AbstractVector)
     # y .= PROLONG * (Pl.M_c_factor \ (RESTRICT * x))
-    y .= TIMESTEP(SPRAY * (Pl.M_c_factor \ (LUMP * TIMESTEP(x))))
+    return y .= TIMESTEP(SPRAY * (Pl.M_c_factor \ (LUMP * TIMESTEP(x))))
 end
 
 # @info "Solve the system using MG+GMRES"
@@ -90,15 +89,15 @@ end
 # savefig(plt, "GMRES_tracer_error.png")
 
 Pl = MyPreconditioner(M_c_factor)
-@time "MG + GMRES" sol_mg = copy(solve(prob, KrylovJL_GMRES(); Pl = Pl, maxiters = 500, restarts = 50, verbose = true, reltol = 1e-12).u)
+@time "MG + GMRES" sol_mg = copy(solve(prob, KrylovJL_GMRES(); Pl = Pl, maxiters = 500, restarts = 50, verbose = true, reltol = 1.0e-12).u)
 @show norm(M * sol_mg - b) / norm(b)
-plt = plothorizontalslice((sol_mg - sol0) * s .|> yr, grd, depth=1000m, clim=(-200, 200), cmap=:balance)
+plt = plothorizontalslice((sol_mg - sol0) * s .|> yr, grd, depth = 1000m, clim = (-200, 200), cmap = :balance)
 savefig(plt, "sMG+GMRES_tracer_error.png")
 
-@time "ILU fact" Pl = IncompleteLU.ilu(M, τ=1e-8)
-@time "ILU solve" sol_ilu = copy(solve(prob, KrylovJL_GMRES(); Pl = Pl, maxiters = 500, restarts = 50, verbose = true, reltol = 1e-12).u)
+@time "ILU fact" Pl = IncompleteLU.ilu(M, τ = 1.0e-8)
+@time "ILU solve" sol_ilu = copy(solve(prob, KrylovJL_GMRES(); Pl = Pl, maxiters = 500, restarts = 50, verbose = true, reltol = 1.0e-12).u)
 @show norm(M * sol_ilu - b) / norm(b)
-plt = plothorizontalslice((sol_ilu - sol0) * s .|> yr, grd, depth=1000m, clim=(-200, 200), cmap=:balance)
+plt = plothorizontalslice((sol_ilu - sol0) * s .|> yr, grd, depth = 1000m, clim = (-200, 200), cmap = :balance)
 savefig(plt, "ILU+GMRES_tracer_error.png")
 
 @show norm(M * sol_gmres - b) / norm(b)

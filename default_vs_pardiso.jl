@@ -20,7 +20,7 @@ v = grd.volume_3D[grd.wet3D];
 
 issrf = let
     issrf3D = zeros(size(grd.wet3D))
-    issrf3D[:,:,1] .= 1
+    issrf3D[:, :, 1] .= 1
     issrf3D[grd.wet3D]
 end
 
@@ -82,7 +82,6 @@ solMKLPardisoFactorize = solve(prob, MKLPardisoFactorize(; nprocs))
 # @time sol7 = solve(prob, IterativeSolversJL_CG(); Pl)
 
 
-
 # IncompleteLU.ilu: an implementation of the incomplete LU-factorization preconditioner. This requires A as a SparseMatrixCSC.
 # @time Pl = IncompleteLU.ilu(A, τ=1e-8) # arbitriry largest τ for which solver worked fast
 # sol8 = solve(prob, KrylovJL_GMRES(); Pl)
@@ -90,14 +89,9 @@ solMKLPardisoFactorize = solve(prob, MKLPardisoFactorize(; nprocs))
 # @time sol8 = solve(prob, KrylovJL_GMRES(); Pl)
 
 
-
 # BoomerAMG preconditioner
 # Pl = HYPRE.BoomerAMG
 # sol = solve(prob, HYPREAlgorithm(HYPRE.PCG); Pl)
-
-
-
-
 
 
 # The following preconditioners match the interface of LinearSolve.jl.
