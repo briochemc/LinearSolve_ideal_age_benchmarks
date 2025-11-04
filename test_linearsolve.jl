@@ -25,6 +25,7 @@ using RestrictProlong
 grd, T = OCCA.load()
 foo
 # grd, T = OCIM2_48L.load()
+# grd, T = OCIM2.load()
 # grd, T = Primeau_2x2x2.load()
 
 @info "Grid size: $(size(grd.wet3D))"
@@ -119,15 +120,15 @@ if true
         A_layers_factors
     end
     Base.eltype(::LayerPreconditioner) = Float64
-    function LinearAlgebra.ldiv!(Pl::LayerPreconditioner, x::AbstractVector)
+    @views function LinearAlgebra.ldiv!(Pl::LayerPreconditioner, x::AbstractVector)
         for (idx, A_factor) in zip(Pl.idx_layers, Pl.A_layers_factors)
-            LinearAlgebra.ldiv!(view(x, idx), A_factor)
+            LinearAlgebra.ldiv!(x[idx], A_factor)
         end
         return x
     end
-    function LinearAlgebra.ldiv!(y::AbstractVector, Pl::LayerPreconditioner, x::AbstractVector)
+    @views function LinearAlgebra.ldiv!(y::AbstractVector, Pl::LayerPreconditioner, x::AbstractVector)
         for (idx, A_factor) in zip(Pl.idx_layers, Pl.A_layers_factors)
-            LinearAlgebra.ldiv!(view(y, idx), A_factor, view(x, idx))
+            LinearAlgebra.ldiv!(y[idx], A_factor, x[idx])
         end
         return y
     end
@@ -141,6 +142,121 @@ if true
 
 
 end
+
+# Try to bake in my lower block LU solver as preconditioner by layer
+if true # hangs? Curous why this one would hang but not the diagonal?
+
+    struct LowerLayerPreconditioner
+        M
+        indices
+        factors
+    end
+    Base.eltype(::LowerLayerPreconditioner) = Float64
+    @views function LinearAlgebra.ldiv!(y::AbstractVector, Pl::LowerLayerPreconditioner, x::AbstractVector)
+        m = length(Pl.indices)
+        for i in 1:m
+            @show i
+            idxi = Pl.indices[i]
+            rhs = x[idxi]
+            for j in 1:(i - 1)
+                @show j
+                idxj = Pl.indices[j]
+                # rhs = rhs - Pl.M[idxi, idxj] * x[idxj]
+                mul!(rhs, Pl.M[idxi, idxj], y[idxj], -1.0, 1.0)
+            end
+            ldiv!(y[idxi], Pl.factors[i], rhs)
+            # y[idxi] .= Pl.factors[i] \ rhs
+        end
+        return y
+    end
+    Pl_lowerblocklayer = LowerLayerPreconditioner(
+        A,
+        idx_layers,
+        [factorize(A[idx, idx]) for idx in idx_layers]
+    )
+    @time "KrylovJL_GMRES + layer-by-layer lower block LU as preconditioner" sol_layers = solve(prob, KrylovJL_GMRES(); Pl = Pl_lowerblocklayer, maxiters = 1000, restarts = 100, verbose = true, reltol = 1e-12)
+
+end
+
+
+# Test bloclk Thomas algo found on Github / Julia discourse
+# https://discourse.julialang.org/t/solvers-for-block-tridiagonal/130013/3
+if false # does not work for OCCA
+    """
+    A concise, lightweight, high-performance Julia implementation of the Thomas block-tridiagonal matrix algorithm. You can copy the code to use in your scripts or modules.
+    """
+
+    mutable struct BlockThomas
+        n
+        m
+        lu_buf
+        D_buf
+        b_buf
+        function BlockThomas(n, m)
+            lu_buf = Vector{SparseArrays.UMFPACK.UmfpackLU{Float64, Int64}}(undef, m)
+            # D_buf = mat(n, n)
+            # b_buf = vec(n)
+            D_buf = sparse(n, n)
+            b_buf = Vector{Float64}(undef, n)
+            return new(n, m, lu_buf, D_buf, b_buf)
+        end
+    end
+
+    const BlockThomasBuf = Vector{BlockThomas}(undef, Threads.nthreads())
+
+    function get_block_thomas_buffer(n::Int, m::Int)
+        tid = Threads.threadid()
+        return if !isassigned(BlockThomasBuf, tid)
+            BlockThomasBuf[tid] = BlockThomas(n, m)
+        elseif BlockThomasBuf[tid].n != n || BlockThomasBuf[tid].m != m
+            BlockThomasBuf[tid] = BlockThomas(n, m)
+        else
+            BlockThomasBuf[tid]
+        end
+    end
+
+    """
+    Note that this function modifies `x`, `L`, `D` and `b` in place
+    """
+    @views function block_thomas_tridiagonal!(x::AbstractVector, L::AbstractVector{T},
+        D::AbstractVector{T}, U::AbstractVector{T}, b::AbstractVector) where {T}
+        n = size(D[1], 1) # each block has size n*n
+        m = length(D) # num of blocks
+        (; lu_buf, D_buf, b_buf) = get_block_thomas_buffer(n, m)
+
+        # Forward elimination
+        for i = 1:m-1
+            lu_buf[i] = lu!(D[i])
+            rdiv!(L[i], lu_buf[i])
+            D[i+1] .-= mul!(D_buf, L[i], U[i])
+            b[n*i+1:n*(i+1)] .-= mul!(b_buf, L[i], b[n*(i-1)+1:n*i])
+        end
+
+        # Backward substitution
+        ldiv!(x[n*(m-1)+1:n*m], lu!(D[m]), b[n*(m-1)+1:n*m])
+        for i = m-1:-1:1
+            ldiv!(x[n*(i-1)+1:n*i], lu_buf[i], b[n*(i-1)+1:n*i] - mul!(b_buf, U[i], x[n*i+1:n*(i+1)]))
+        end
+
+        return x
+    end
+
+
+    wet3D = grd.wet3D;
+    maxindexinlayer = [sum(wet3D[:, :, 1:k]) for k in axes(wet3D, 3)];
+    minindexinlayer = [1; maxindexinlayer[1:end-1] .+ 1];
+    idx_layers = [min:max for (min, max) in zip(minindexinlayer, maxindexinlayer)];
+
+    sol_BlockThomas = copy(b)
+    b_BlockThomas = copy(b)
+    D = [A[idx, idx] for idx in idx_layers]
+    L = [A[Lidx, idx] for (Lidx, idx) in zip(idx_layers[2:end], idx_layers[1:end-1])]
+    U = [A[idx, Uidx] for (idx, Uidx) in zip(idx_layers[1:end-1], idx_layers[2:end])]
+    sol_BlockThomas = block_thomas_tridiagonal!(sol_BlockThomas, L, D, U, b_BlockThomas)
+
+
+end
+
 foo
 
 # Pardiso solver
