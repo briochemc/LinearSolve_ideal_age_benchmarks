@@ -1,5 +1,6 @@
 using Pkg
 Pkg.activate(".")
+Pkg.instantiate()
 
 using AIBECS
 using LinearSolve
@@ -72,6 +73,75 @@ if false # hangs
     plt5 = plothorizontalslice((sol5 - sol0) * s .|> yr, grd, depth=1000m, clim=(-200, 200), cmap=:balance)
     @time sol5 = solve(prob)
 end
+
+# Try to use a tridiagonal preconditioner based on k-first indexing
+if true
+    wet3D = grd.wet3D
+    L = findall(wet3D)
+    wet3D_kfirst = permutedims(wet3D, (3, 1, 2))
+    L_kfirst = findall(wet3D_kfirst)
+    # assign indices to L3D and get k-first ordering
+    L3D = zeros(Int, size(wet3D))
+    L3D[wet3D] .= 1:length(L)
+    idx = permutedims(L3D, (3, 1, 2))[L_kfirst]
+    # assign k-first indices to L3D_kfirst and get reverse ordering
+    L3D_kfirst = zeros(Int, size(wet3D_kfirst))
+    L3D_kfirst[L_kfirst] .= 1:length(L_kfirst)
+    idx_kfirst = permutedims(L3D_kfirst, (2, 3, 1))[L]
+    # Reorder in k first
+    A_kfirst = A[idx, idx]
+    b_kfirst = b[idx]
+    # option 1: use the full tridiagonal matrix
+    # option 2 would be to loop through the water columns
+    TridiagonalA = Tridiagonal(A_kfirst)
+    prob_kfirst = LinearProblem(A_kfirst, b_kfirst)
+    @time "KrylovJL_GMRES + TriDiag k-first as preconditioner" sol_kfirst = solve(prob_kfirst, KrylovJL_GMRES(); Pl = TridiagonalA, maxiters = 1000, restarts = 100, verbose = true, reltol = 1e-12)
+    sol_kfirst_back = sol_kfirst[idx_kfirst]
+
+
+
+
+    sol5 = solve(prob, KrylovJL_GMRES())
+    plt5 = plothorizontalslice((sol5 - sol0) * s .|> yr, grd, depth=1000m, clim=(-200, 200), cmap=:balance)
+    @time sol5 = solve(prob)
+end
+
+# Try to factorize each layer only?
+if true
+    wet3D = grd.wet3D
+    maxindexinlayer = [sum(wet3D[:, :, 1:k]) for k in axes(wet3D, 3)]
+    minindexinlayer = [1; maxindexinlayer[1:end-1] .+ 1]
+    idx_layers = [min:max for (min, max) in zip(minindexinlayer, maxindexinlayer)]
+
+
+    struct LayerPreconditioner
+        idx_layers
+        A_layers_factors
+    end
+    Base.eltype(::LayerPreconditioner) = Float64
+    function LinearAlgebra.ldiv!(Pl::LayerPreconditioner, x::AbstractVector)
+        for (idx, A_factor) in zip(Pl.idx_layers, Pl.A_layers_factors)
+            LinearAlgebra.ldiv!(view(x, idx), A_factor)
+        end
+        return x
+    end
+    function LinearAlgebra.ldiv!(y::AbstractVector, Pl::LayerPreconditioner, x::AbstractVector)
+        for (idx, A_factor) in zip(Pl.idx_layers, Pl.A_layers_factors)
+            LinearAlgebra.ldiv!(view(y, idx), A_factor, view(x, idx))
+        end
+        return y
+    end
+    Pl_layer = LayerPreconditioner(
+        idx_layers,
+        [factorize(A[idx, idx]) for idx in idx_layers]
+    )
+
+
+    @time "KrylovJL_GMRES + layer-by-layer LU as preconditioner" sol_layers = solve(prob, KrylovJL_GMRES(); Pl = Pl_layer, maxiters = 1000, restarts = 100, verbose = true, reltol = 1e-12)
+
+
+end
+foo
 
 # Pardiso solver
 if false # cannot use MKL Pardiso on Mac
