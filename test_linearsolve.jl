@@ -142,7 +142,10 @@ if true
 end
 
 # Try to bake in my lower block LU solver as preconditioner by layer
-if true # hangs? Curous why this one would hang but not the diagonal?
+# hangs? # FIXME Curous why this one would hang but not the diagonal?
+# CHECK that this solver is exact for a random upper block matrix
+# TODO Try the Upper vesion
+if true
 
     struct LowerLayerPreconditioner
         M
@@ -256,6 +259,7 @@ if false # does not work for OCCA
 
 
 end
+
 
 foo
 
