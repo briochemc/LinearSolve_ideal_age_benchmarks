@@ -260,7 +260,6 @@ if false # does not work for OCCA
 
 end
 
-
 foo
 
 # Pardiso solver
